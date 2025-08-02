@@ -2776,23 +2776,42 @@ class WanVideoSampler:
                             timesteps = [timestep_transform(t, shift=shift, num_timesteps=1000) for t in timesteps]
                         else:
                             sample_scheduler, timesteps = get_scheduler(scheduler, steps, shift, device, transformer.dim, flowedit_args, denoise_strength, sigmas=sigmas)
-
+                        
                             transformed_timesteps = []
                             for t in timesteps:
                                 t_tensor = torch.tensor([t.item()], device=device)
                                 transformed_timesteps.append(t_tensor)
-
+                        
                             transformed_timesteps.append(torch.tensor([0.], device=device))
                             timesteps = transformed_timesteps
                         
+                        # Apply start_step and end_step to multitalk timesteps
+                        original_timesteps_len = len(timesteps)
+                        if end_step != -1 and end_step < len(timesteps):
+                            timesteps = timesteps[:end_step]
+                            if hasattr(sample_scheduler, 'sigmas'):
+                                sample_scheduler.sigmas = sample_scheduler.sigmas[:end_step+1]
+                            log.info(f"Multitalk: Sampling until step {end_step}")
+                        if start_step > 0 and start_step < len(timesteps):
+                            timesteps = timesteps[start_step:]
+                            if hasattr(sample_scheduler, 'sigmas'):
+                                sample_scheduler.sigmas = sample_scheduler.sigmas[start_step:]
+                            log.info(f"Multitalk: Skipping first {start_step} steps")
+                        
                         # sample videos
-                        latent = noise
-
+                        if start_step > 0 and samples is not None:
+                            # Use the input samples as the starting latent
+                            latent = samples["samples"].squeeze(0).to(device)
+                        else:
+                            latent = noise
+                        
                         # injecting motion frames
                         if not is_first_clip:
                             latent_motion_frames = latent_motion_frames.to(latent.dtype).to(device)
                             motion_add_noise = torch.randn(latent_motion_frames.shape, device=torch.device("cpu"), generator=seed_g).to(device).contiguous()
-                            add_latent = add_noise(latent_motion_frames, motion_add_noise, timesteps[0])
+                            # Use the first available timestep for noise addition
+                            noise_timestep = timesteps[0] if len(timesteps) > 0 else torch.tensor([0.], device=device)
+                            add_latent = add_noise(latent_motion_frames, motion_add_noise, noise_timestep)
                             _, T_m, _, _ = add_latent.shape
                             latent[:, :T_m] = add_latent
 
