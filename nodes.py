@@ -2934,6 +2934,8 @@ class WanVideoSampler:
                                         miss_lengths.append(0)
                     
                     gen_video_samples = torch.cat(gen_video_list, dim=2).to(torch.float32)
+
+                    final_latent = x0
                     
                     del noise, latent
                     if force_offload:
@@ -2946,7 +2948,17 @@ class WanVideoSampler:
                         torch.cuda.reset_peak_memory_stats(device)
                     except:
                         pass
-                    return {"video": gen_video_samples[0].permute(1, 2, 3, 0).cpu()},
+                    
+                    return ({
+                        "samples": final_latent.unsqueeze(0).cpu(),
+                        "looped": False,
+                        "end_image": None,
+                        "has_ref": has_ref,
+                        "drop_last": False,
+                        "generator_state": seed_g.get_state(),
+                    }, {
+                        "samples": final_latent.unsqueeze(0).cpu(),
+                    })
                 
                 #region normal inference
                 else:
