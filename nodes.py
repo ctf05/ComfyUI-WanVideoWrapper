@@ -2789,13 +2789,16 @@ class WanVideoSampler:
                         original_timesteps_len = len(timesteps)
                         if end_step != -1 and end_step < len(timesteps):
                             timesteps = timesteps[:end_step]
-                            if hasattr(sample_scheduler, 'sigmas'):
+                            if hasattr(sample_scheduler, 'sigmas') and sample_scheduler.sigmas is not None:
                                 sample_scheduler.sigmas = sample_scheduler.sigmas[:end_step+1]
                             log.info(f"Multitalk: Sampling until step {end_step}")
                         if start_step > 0 and start_step < len(timesteps):
                             timesteps = timesteps[start_step:]
-                            if hasattr(sample_scheduler, 'sigmas'):
+                            if hasattr(sample_scheduler, 'sigmas') and sample_scheduler.sigmas is not None:
                                 sample_scheduler.sigmas = sample_scheduler.sigmas[start_step:]
+                            # Reset the scheduler's step index for the second sampler
+                            if hasattr(sample_scheduler, 'step_index'):
+                                sample_scheduler.step_index = 0
                             log.info(f"Multitalk: Skipping first {start_step} steps")
                         
                         # sample videos
