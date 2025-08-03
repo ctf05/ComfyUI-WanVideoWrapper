@@ -1041,6 +1041,7 @@ class WanVideoModelLoader:
                 log.info("Using accelerate to load and assign model weights to device...")
                 param_count = sum(1 for _ in transformer.named_parameters())
                 pbar = ProgressBar(param_count)
+                cnt = 0
                 for name, param in tqdm(transformer.named_parameters(), 
                         desc=f"Loading transformer parameters to {transformer_load_device}", 
                         total=param_count,
@@ -1052,10 +1053,13 @@ class WanVideoModelLoader:
                     if "patch_embedding" in name:
                         dtype_to_use = torch.float32
                     set_module_tensor_to_device(transformer, name, device=transformer_load_device, dtype=dtype_to_use, value=sd[name])
-                    pbar.update(1)
+                    cnt += 1
+                    if cnt % 100 == 0:
+                        pbar.update(100)
 
                 #for name, param in transformer.named_parameters():
                 #    print(name, param.dtype, param.device, param.shape)
+                pbar.update_absolute(param_count)
 
         comfy_model.diffusion_model = transformer
         comfy_model.load_device = transformer_load_device
@@ -1088,6 +1092,9 @@ class WanVideoModelLoader:
                 
                 if "diffusion_model.patch_embedding.lora_A.weight" in lora_sd:
                     log.info("Control-LoRA detected, patching model...")
+                    if not merge_loras:
+                        log.warning("Control-LoRA patching is only supported with merge_loras=True, setting it to True")
+                        merge_loras = True
                     control_lora = True
 
                     in_cls = transformer.patch_embedding.__class__ # nn.Conv3d
@@ -1111,7 +1118,6 @@ class WanVideoModelLoader:
                     
                     transformer.patch_embedding = new_in
                     transformer.expanded_patch_embedding = new_in
-                    transformer.register_to_config(in_dim=new_in_dim)
 
                 patcher, _ = load_lora_for_models(patcher, None, lora_sd, lora_strength, 0)
                 
@@ -1134,6 +1140,7 @@ class WanVideoModelLoader:
         
             patcher.model.diffusion_model = _replace_with_gguf_linear(patcher.model.diffusion_model, base_dtype, sd, patches=patcher.patches)
             pbar = ProgressBar(param_count)
+            cnt = 0
             for name, param in tqdm(patcher.model.diffusion_model.named_parameters(), 
                     desc=f"Loading transformer parameters to {transformer_load_device}", 
                     total=param_count,
@@ -1146,10 +1153,14 @@ class WanVideoModelLoader:
                 else:
                     dtype_to_use = base_dtype
                 set_module_tensor_to_device(patcher.model.diffusion_model, name, device=transformer_load_device, dtype=dtype_to_use, value=sd[name])
-                pbar.update(1)
+                cnt += 1
+                if cnt % 100 == 0:
+                    pbar.update(100)
+
             #for name, param in transformer.named_parameters():
             #    print(name, param.dtype, param.device, param.shape)
             #patcher.load(device, full_load=True)
+            pbar.update_absolute(param_count)
 
         patcher.model.is_patched = True
 
